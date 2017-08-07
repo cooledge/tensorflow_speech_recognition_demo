@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import wave
+import pdb
 
 import numpy
 import numpy as np
@@ -164,6 +165,7 @@ def mfcc_batch_generator(batch_size=10, source=Source.DIGIT_WAVES, target=Target
   while True:
     print("loaded batch of %d files" % len(files))
     shuffle(files)
+    batch_no = 0
     for wav in files:
       if not wav.endswith(".wav"): continue
       wave, sr = librosa.load(path+wav, mono=True)
@@ -179,9 +181,10 @@ def mfcc_batch_generator(batch_size=10, source=Source.DIGIT_WAVES, target=Target
       if len(batch_features) >= batch_size:
         # print(np.array(batch_features).shape)
         # yield np.array(batch_features), labels
-        yield batch_features, labels  # basic_rnn_seq2seq inputs must be a sequence
+        yield batch_features, labels, batch_no  # basic_rnn_seq2seq inputs must be a sequence
         batch_features = []  # Reset for next batch
         labels = []
+        batch_no += 1
 
 
 # If you set dynamic_pad=True when calling tf.train.batch the returned batch will be automatically padded with 0s. Handy! A lower-level option is to use tf.PaddingFIFOQueue.
