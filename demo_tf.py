@@ -4,6 +4,38 @@ import tensorflow as tf
 import numpy as np
 import pdb
 
+
+def h_layer(input):
+  scaler = 10.0
+
+  number_of_classes = input.get_shape()[1]
+  number_of_outputs = number_of_classes
+  weights = tf.Variable(tf.random_normal([number_of_classes, number_of_classes]))
+  biases = tf.Varible(tf.zeros(number_of_classes))
+
+  def layer(input, id):
+    return(tf.nn.softmax(tf.scalar_mul(scaler, tf.matmul(input, weights) + biases), name=id))
+
+  l1 = layer(input, "layer_1")
+  l2 = layer(l1, "layer_2")
+  l3 = layer(l2, "layer_3")
+  l4 = layer(l3, "layer_4")
+
+  output_full = tf.clip_by_value(input + l1 + l2 + l3 + l4, 0.0, 1.0)
+  #output = tf.split(tf.clip_by_value(input + l1 + l2 + l3 + l4, 0.0, 1.0), [number_of_outputs, (number_of_classes-number_of_outputs)], axis=1)[0]
+  output = tf.clip_by_value(input + l1 + l2 + l3 + l4, 0.0, 1.0)
+  output = tf.identity(self.model_hierarchy_output, "hierarchy_output")
+  return output
+
+# inputs (batch_size, width)
+# outputs (batch_size, width)
+def h_layers(input, h_width):
+  # split input and apply h_layer then cat the whole she-bang
+  number_of_splits = input.get_shape()[1] / h_width
+  splits = tf.split(input, number_of_splits)
+  output_splits = map(splits, h_layer)
+  return tf.concat(output_splits)
+    
 '''
 # list of seq_len of array of size batch_size, state_size
 seq_len = 3
@@ -47,11 +79,16 @@ rnn_output, rnn_state = tf.nn.static_rnn(cell, rnn_input, dtype=tf.float32)
 rnn_output = tf.concat(rnn_output, 1)
 # net = tflearn.lstm(net, 128, dropout=0.8)
 
+use_h = True
+if use_h:
+  rnn_output = h_layers(rnn_outputs, 8)
+
 model_fc_w = tf.get_variable("fc_w", shape=(width*128, 10))
 model_fc_b = tf.get_variable("fc_b", shape=(10))
 model_logits = tf.matmul(rnn_output, model_fc_w) + model_fc_b
 # (? 10)
 #net = tflearn.fully_connected(net, classes, activation='softmax')
+
 
 model_predict = tf.nn.softmax(model_logits)
 model_loss = tf.losses.softmax_cross_entropy(model_output, model_logits)
