@@ -52,6 +52,7 @@ class Target(Enum):  # labels
   sentence=6
   sentiment=7
   first_letter=8
+  dense=9
 
 
 
@@ -172,6 +173,7 @@ def mfcc_batch_generator(batch_size=10, source=Source.DIGIT_WAVES, target=Target
       if target==Target.speaker: label=one_hot_from_item(speaker(wav), speakers)
       elif target==Target.digits:  label=dense_to_one_hot(int(wav[0]),10)
       elif target==Target.first_letter:  label=dense_to_one_hot((ord(wav[0]) - 48) % 32,32)
+      elif target==Target.dense:  label=[ord(wav[0]) - ord('0')]
       else: raise Exception("todo : labels for Target!")
       labels.append(label)
       mfcc = librosa.feature.mfcc(wave, sr)
