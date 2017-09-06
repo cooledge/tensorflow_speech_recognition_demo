@@ -2,6 +2,12 @@
 for the normal way the features are at the time slices. 
 For this one I want to reverse it so the at each time all
 the feature values are input
+
+epoch 500
+loaded batch of 2402 files
+loaded batch of 2402 files
+right(2322) wrong(110)
+
 '''
 
 from __future__ import division, print_function, absolute_import 
