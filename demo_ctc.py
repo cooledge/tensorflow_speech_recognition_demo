@@ -36,10 +36,10 @@ model_logits3d = tf.stack(model_logits)
 model_loss = tf.reduce_mean(tf.nn.ctc_loss(model_targetY, model_logits3d, model_seq_lengths))
 
 #learning_rate = 0.0001
-#learning_rate = 0.001
+learning_rate = 0.001
 #model_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(model_loss)
 
-optimizer = tf.train.AdamOptimizer(1e-3)
+optimizer = tf.train.AdamOptimizer(learning_rate)
 gradients, variables = zip(*optimizer.compute_gradients(model_loss))
 gradients, _ = tf.clip_by_global_norm(gradients, 5.0)
 model_optimizer = optimizer.apply_gradients(zip(gradients, variables))
@@ -74,7 +74,7 @@ def dense_to_sparse(dense):
 batchTargetIxs, batchTargetVals, batchTargetShape, batchSeqLengths = dense_to_sparse(trainY)
 
 epoch = 0
-epochs = 100
+epochs = 500
 while epoch < epochs:
   epoch += 1
   print("epoch {0}".format(epoch))
@@ -90,7 +90,9 @@ while epoch < epochs:
                  model_seq_lengths: batchSeqLengths
                 }
 
+    #model_loss = tf.reduce_mean(tf.nn.ctc_loss(model_targetY, model_logits3d, model_seq_lengths))
     loss, dense, _ = session.run([model_loss, tf.sparse_tensor_to_dense(model_targetY), model_optimizer], feed_dict)
+    print("loss({0})".format(loss))
     X, Y, batch_no = next(batch)
     trainX, trainY = X, Y
     testX, testY = X, Y #overfit for now
