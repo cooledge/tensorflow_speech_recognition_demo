@@ -8,10 +8,10 @@ import pdb
 def h_layer(input):
   scaler = 10.0
 
-  number_of_classes = input.get_shape()[1]
+  number_of_classes = int(input.get_shape()[1])
   number_of_outputs = number_of_classes
   weights = tf.Variable(tf.random_normal([number_of_classes, number_of_classes]))
-  biases = tf.Varible(tf.zeros(number_of_classes))
+  biases = tf.Variable(tf.zeros(number_of_classes))
 
   def layer(input, id):
     return(tf.nn.softmax(tf.scalar_mul(scaler, tf.matmul(input, weights) + biases), name=id))
@@ -24,17 +24,17 @@ def h_layer(input):
   output_full = tf.clip_by_value(input + l1 + l2 + l3 + l4, 0.0, 1.0)
   #output = tf.split(tf.clip_by_value(input + l1 + l2 + l3 + l4, 0.0, 1.0), [number_of_outputs, (number_of_classes-number_of_outputs)], axis=1)[0]
   output = tf.clip_by_value(input + l1 + l2 + l3 + l4, 0.0, 1.0)
-  output = tf.identity(self.model_hierarchy_output, "hierarchy_output")
+  output = tf.identity(output, "hierarchy_output")
   return output
 
 # inputs (batch_size, width)
 # outputs (batch_size, width)
 def h_layers(input, h_width):
   # split input and apply h_layer then cat the whole she-bang
-  number_of_splits = input.get_shape()[1] / h_width
-  splits = tf.split(input, number_of_splits)
-  output_splits = map(splits, h_layer)
-  return tf.concat(output_splits)
+  number_of_splits = int(int(input.get_shape()[1]) / h_width)
+  splits = tf.split(input, number_of_splits, axis=1)
+  output_splits = [h_layer(split) for split in splits]
+  return tf.concat(output_splits, 1)
     
 '''
 # list of seq_len of array of size batch_size, state_size
@@ -79,13 +79,58 @@ rnn_output, rnn_state = tf.nn.static_rnn(cell, rnn_input, dtype=tf.float32)
 rnn_output = tf.concat(rnn_output, 1)
 # net = tflearn.lstm(net, 128, dropout=0.8)
 
+'''
 use_h = True
-if use_h:
-  rnn_output = h_layers(rnn_outputs, 8)
 
-model_fc_w = tf.get_variable("fc_w", shape=(width*128, 10))
-model_fc_b = tf.get_variable("fc_b", shape=(10))
-model_logits = tf.matmul(rnn_output, model_fc_w) + model_fc_b
+epoch 500
+loaded batch of 2402 files
+loaded batch of 2402 files
+right(1517) wrong(915)
+
+use_h = False
+
+epoch 500
+loaded batch of 2402 files
+loaded batch of 2402 files
+right(2247) wrong(185)
+
+use_dual = True
+
+loaded batch of 2402 files
+loaded batch of 2402 files
+right(2094) wrong(338)
+
+'''
+
+use_dual = True
+
+if use_dual:
+  # (batch_size, width*128)
+  rnn_output_h = h_layers(rnn_output, 8)
+
+  # (batch_size, width*128)
+  model_fc_w_l1 = tf.get_variable("fc_w_l1", shape=(width*128, width*128))
+  model_fc_b_l1 = tf.get_variable("fc_b_l1", shape=(width*128))
+  rnn_output_d = tf.matmul(rnn_output, model_fc_w_l1) + model_fc_b_l1
+
+  # combine _h and _d
+  h_split = tf.split(rnn_output_h, batch_size)
+  d_split = tf.split(rnn_output_d, batch_size)
+  hd = [[tf.concat([h[0], d[0]], 0)] for h,d in zip(h_split, d_split)]
+  hd_layer = tf.concat(hd, 0)
+
+  model_fc_w_l2 = tf.get_variable("fc_w_l2", shape=(width*128*2, 10))
+  model_fc_b_l2 = tf.get_variable("fc_b_l2", shape=(10))
+  model_logits = tf.matmul(hd_layer, model_fc_w_l2) + model_fc_b_l2
+else:
+  use_h = False
+  if use_h:
+    rnn_output = h_layers(rnn_output, 8)
+
+  model_fc_w = tf.get_variable("fc_w", shape=(width*128, 10))
+  model_fc_b = tf.get_variable("fc_b", shape=(10))
+  model_logits = tf.matmul(rnn_output, model_fc_w) + model_fc_b
+
 # (? 10)
 #net = tflearn.fully_connected(net, classes, activation='softmax')
 
