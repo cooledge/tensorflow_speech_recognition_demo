@@ -73,9 +73,9 @@ cell = tf.nn.rnn_cell.BasicLSTMCell(128)
 cell = tf.contrib.rnn.DropoutWrapper(cell, input_keep_prob=0.8, output_keep_prob=0.8)
 rnn_input = [tf.squeeze(input, axis=1) for input in tf.split(model_input, width, axis=1)]
 
-# rnn_input.shape = list(20) of 64X128
+# rnn_input.shape = list(20) of 64X80
 rnn_output, rnn_state = tf.nn.static_rnn(cell, rnn_input, dtype=tf.float32)
-# rnn_output.shape = 64X20, 128
+# rnn_output.shape =  list of 20 of 64X128
 rnn_output = tf.concat(rnn_output, 1)
 # net = tflearn.lstm(net, 128, dropout=0.8)
 

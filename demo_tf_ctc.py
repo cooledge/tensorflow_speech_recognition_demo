@@ -48,11 +48,7 @@ rnn_output, rnn_state = tf.nn.static_rnn(cell, rnn_input, dtype=tf.float32)
 rnn_output = tf.concat(rnn_output, 1)
 # net = tflearn.lstm(net, 128, dropout=0.8)
 
-model_fc_w = tf.get_variable("fc_w", shape=(width*128, 10))
-model_fc_b = tf.get_variable("fc_b", shape=(10))
-model_logits = tf.matmul(rnn_output, model_fc_w) + model_fc_b
-# (? 10)
-#net = tflearn.fully_connected(net, classes, activation='softmax')
+tf.nn.ctc_loss(model_labels, rnn_output, width)
 
 
 model_predict = tf.nn.softmax(model_logits)

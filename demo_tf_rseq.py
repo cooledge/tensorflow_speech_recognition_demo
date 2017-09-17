@@ -1,6 +1,13 @@
 '''
 For this one train the nn on single digits but build 
-a model that can recognize sequences of digits
+a model that can recognize sequence of two digits
+
+epoch 499
+loaded batch of 2402 files
+loaded batch of 2402 files
+right(2359) wrong(73) both_right(2296) original_right(63)
+
+next thing to try multiple rnns offset
 '''
 
 from __future__ import division, print_function, absolute_import 
@@ -42,13 +49,14 @@ model_logits = tf.matmul(rnn_output, model_fc_w) + model_fc_b
 
 smodel_input = tf.placeholder(tf.float32, shape=(batch_size, width, 2*height))
 srnn_input = [tf.squeeze(input, axis=2) for input in tf.split(smodel_input, 2*height, axis=2)]
-pdb.set_trace()
 # srnn_output 160X64X128
 srnn_output, srnn_state = tf.nn.static_rnn(cell, srnn_input, dtype=tf.float32)
 # srnn_output 64*20480
 srnn_output = tf.concat(srnn_output, 1)
-smodel_logits = tf.matmul(tf.split(srnn_output, 2, axis=1)[0], model_fc_w) + model_fc_b
-smodel_predict = tf.nn.softmax(model_logits)
+smodel_logits1 = tf.matmul(tf.split(srnn_output, 2, axis=1)[0], model_fc_w) + model_fc_b
+smodel_predict1 = tf.nn.softmax(smodel_logits1)
+smodel_logits2 = tf.matmul(tf.split(srnn_output, 2, axis=1)[1], model_fc_w) + model_fc_b
+smodel_predict2 = tf.nn.softmax(smodel_logits2)
 
 model_loss = tf.losses.softmax_cross_entropy(model_output, model_logits)
 opt = tf.train.AdamOptimizer(learning_rate)
@@ -88,20 +96,26 @@ while epoch < epochs:
 
   # check it
   batch_no = 1
-  right = 0
+  original_right = 0
+  both_right = 0
   wrong = 0
   while batch_no > 0:
-    predict = session.run(smodel_predict, {smodel_input: trainX})
+    train_X2 = np.zeros((64,20,160),dtype=float)
+    train_X2[:,:,0:80] = trainX
+    train_X2[:,:,80:160] = trainX
+    predict1, predict2 = session.run([smodel_predict1, smodel_predict2], {smodel_input: train_X2})
     for i in range(batch_size):
-      if np.argmax(predict[i]) == np.argmax(trainY[i]):
-        right += 1
+      if np.argmax(predict1[i]) == np.argmax(trainY[i]) and np.argmax(predict2[i]) == np.argmax(trainY[i]):
+        both_right += 1
+      elif np.argmax(predict1[i]) == np.argmax(trainY[i]):
+        original_right += 1
       else:
         wrong += 1
     X, Y, batch_no = next(batch)
     trainX, trainY = X, Y
     testX, testY = X, Y #overfit for now
   
-  print("right({0}) wrong({1})".format(right, wrong))
+  print("right({0}) wrong({1}) both_right({2}) original_right({3})".format(both_right+original_right, wrong, both_right, original_right))
 '''
 model = tflearn.DNN(net, tensorboard_verbose=0)
 while 1: #training_iters
