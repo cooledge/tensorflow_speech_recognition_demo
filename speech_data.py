@@ -7,6 +7,7 @@ import sys
 import wave
 import pdb
 
+from random import choice
 import numpy
 import numpy as np
 import skimage.io  # scikit-image
@@ -157,6 +158,48 @@ def spectro_batch_generator(batch_size=10,width=64,source_data=Source.DIGIT_SPEC
         batch = []  # Reset for next batch
         labels = []
 
+# generates sequences of digits of length N
+def mfcc_sequence_batch_generator(batch_size=10, height=80, source=Source.DIGIT_WAVES, target=Target.digits, seq_len=1):
+  if target != Target.dense:
+    raise Exception("todo : labels for Target!")
+  maybe_download(source, DATA_DIR)
+  if target == Target.speaker: speakers = get_speakers()
+  batch_features = []
+  labels = []
+  files = os.listdir(path)
+  while True:
+    print("loaded batch of %d files" % len(files))
+    shuffle(files)
+    batch_no = 0
+    for wav in files:
+      if not wav.endswith(".wav"): continue
+
+      wave = np.array([], dtype=np.float32)
+      label = []
+      
+      w, sr = librosa.load(path+wav, mono=True)
+      wave = np.concatenate((wave, w)) 
+      label += [ord(wav[0]) - ord('0')]
+
+      for _ in range(seq_len-1):
+        wav = choice(files)
+        w, sr = librosa.load(path+wav, mono=True)
+        label += [ord(wav[0]) - ord('0')]
+        wave = np.concatenate((wave, w)) 
+
+      labels.append(label)
+      mfcc = librosa.feature.mfcc(wave, sr)
+      # print(np.array(mfcc).shape)
+      mfcc=np.pad(mfcc,((0,0),(0,height-len(mfcc[0]))), mode='constant', constant_values=0)
+      batch_features.append(np.array(mfcc))
+      if len(batch_features) >= batch_size:
+        # print(np.array(batch_features).shape)
+        # yield np.array(batch_features), labels
+        yield batch_features, labels, batch_no  # basic_rnn_seq2seq inputs must be a sequence
+        batch_features = []  # Reset for next batch
+        labels = []
+        batch_no += 1
+
 def mfcc_batch_generator(batch_size=10, source=Source.DIGIT_WAVES, target=Target.digits):
   maybe_download(source, DATA_DIR)
   if target == Target.speaker: speakers = get_speakers()
@@ -169,6 +212,7 @@ def mfcc_batch_generator(batch_size=10, source=Source.DIGIT_WAVES, target=Target
     batch_no = 0
     for wav in files:
       if not wav.endswith(".wav"): continue
+      pdb.set_trace()
       wave, sr = librosa.load(path+wav, mono=True)
       if target==Target.speaker: label=one_hot_from_item(speaker(wav), speakers)
       elif target==Target.digits:  label=dense_to_one_hot(int(wav[0]),10)
