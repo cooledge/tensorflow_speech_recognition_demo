@@ -6,11 +6,12 @@ import pdb
 
 '''
 version 1: static_rnn: after 10 -> right(1168) wrong(1200)
+                       after 60 -> right(1545) wrong(823)
 version 2: added relu: after 10 -> right(1125) wrong(1243)
 version 3: bidi:       after 10 -> right(1034) wrong(1334)
 '''
 
-version = 2
+version = 1
 
 training_iters = 300000  # steps
 batch_size = 64
@@ -97,7 +98,7 @@ def dense_to_sparse(dense):
 batchTargetIxs, batchTargetVals, batchTargetShape, batchSeqLengths = dense_to_sparse(trainY)
 
 epoch = 0
-epochs = 10
+epochs = 100
 while epoch < epochs:
   epoch += 1
   print("epoch {0}".format(epoch))
