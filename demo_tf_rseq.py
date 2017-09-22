@@ -61,15 +61,6 @@ smodel_predict2 = tf.nn.softmax(smodel_logits2)
 model_loss = tf.losses.softmax_cross_entropy(model_output, model_logits)
 opt = tf.train.AdamOptimizer(learning_rate)
 model_train = opt.minimize(model_loss)
-#net = tflearn.regression(net, optimizer='adam', learning_rate=learning_rate, loss='categorical_crossentropy')
-# Training
-
-### add this "fix" for tensorflow version errors
-'''
-col = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-for x in col:
-    tf.add_to_collection(tf.GraphKeys.VARIABLES, x ) 
-'''
 
 batch = speech_data.mfcc_batch_generator(batch_size)
 X, Y, batch_no = next(batch)
@@ -114,16 +105,5 @@ while epoch < epochs:
     X, Y, batch_no = next(batch)
     trainX, trainY = X, Y
     testX, testY = X, Y #overfit for now
-  
+    
   print("right({0}) wrong({1}) both_right({2}) original_right({3})".format(both_right+original_right, wrong, both_right, original_right))
-'''
-model = tflearn.DNN(net, tensorboard_verbose=0)
-while 1: #training_iters
-  model.fit(trainX, trainY, n_epoch=10, validation_set=(testX, testY), show_metric=True,
-          batch_size=batch_size)
-  _y=model.predict(X)
-model.save("tflearn.lstm.model")
-print (_y)
-print (y)
-'''
-
