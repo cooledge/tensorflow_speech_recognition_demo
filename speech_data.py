@@ -159,7 +159,7 @@ def spectro_batch_generator(batch_size=10,width=64,source_data=Source.DIGIT_SPEC
         labels = []
 
 # generates sequences of digits of length N
-def mfcc_sequence_batch_generator(batch_size=10, height=80, source=Source.DIGIT_WAVES, target=Target.digits, seq_len=1):
+def mfcc_sequence_batch_generator(batch_size=10, height=80, source=Source.DIGIT_WAVES, target=Target.digits, seq_len=1, n_mfcc = 20):
   if target != Target.dense:
     raise Exception("todo : labels for Target!")
   maybe_download(source, DATA_DIR)
@@ -182,13 +182,15 @@ def mfcc_sequence_batch_generator(batch_size=10, height=80, source=Source.DIGIT_
       label += [ord(wav[0]) - ord('0')]
 
       for _ in range(seq_len-1):
-        wav = choice(files)
+        wav = ""
+        while not wav.endswith(".wav"):
+          wav = choice(files)
         w, sr = librosa.load(path+wav, mono=True)
         label += [ord(wav[0]) - ord('0')]
         wave = np.concatenate((wave, w)) 
 
       labels.append(label)
-      mfcc = librosa.feature.mfcc(wave, sr)
+      mfcc = librosa.feature.mfcc(wave, sr, n_mfcc = n_mfcc)
       # print(np.array(mfcc).shape)
       mfcc=np.pad(mfcc,((0,0),(0,height-len(mfcc[0]))), mode='constant', constant_values=0)
       batch_features.append(np.array(mfcc))
@@ -212,7 +214,6 @@ def mfcc_batch_generator(batch_size=10, source=Source.DIGIT_WAVES, target=Target
     batch_no = 0
     for wav in files:
       if not wav.endswith(".wav"): continue
-      pdb.set_trace()
       wave, sr = librosa.load(path+wav, mono=True)
       if target==Target.speaker: label=one_hot_from_item(speaker(wav), speakers)
       elif target==Target.digits:  label=dense_to_one_hot(int(wav[0]),10)

@@ -13,6 +13,7 @@ version = 1
 training_iters = 300000  # steps
 batch_size = 64
 
+seq_len = 2
 width = 20  # mfcc features
 height = 160  # (max) length of utterance
 num_classes = 11  # digits + space
@@ -56,24 +57,26 @@ if version == 1:
   model_logits3d = tf.stack(model_logits)
 else:
   model_logits3d = tf.nn.relu(tf.stack(model_logits))
-model_loss = tf.reduce_mean(tf.nn.ctc_loss(model_targetY, model_logits3d, model_seq_lengths))
+#pdb.set_trace()
+model_ctc_loss = tf.nn.ctc_loss(model_targetY, model_logits3d, model_seq_lengths, ctc_merge_repeated=False)
+model_loss = tf.reduce_mean(model_ctc_loss)
 
 #learning_rate = 0.0001
-learning_rate = 0.001
-#model_optimizer = tf.train.AdamOptimizer(learning_rate).minimize(model_loss)
+learning_rate = 0.0001
 
 optimizer = tf.train.AdamOptimizer(learning_rate)
-gradients, variables = zip(*optimizer.compute_gradients(model_loss))
-gradients, _ = tf.clip_by_global_norm(gradients, 5.0)
-model_optimizer = optimizer.apply_gradients(zip(gradients, variables))
 
-#learning_rate = 0.001
-#model_optimizer = tf.train.AdagradOptimizer(learning_rate).minimize(model_loss)
+if True:
+  model_gradients, model_variables = zip(*optimizer.compute_gradients(model_loss))
+  model_gradients, _ = tf.clip_by_global_norm(model_gradients, 5.0)
+  model_optimizer = optimizer.apply_gradients(zip(model_gradients, model_variables))
+else:
+  model_optimizer = optimizer.minimize(model_loss)
 
 model_predict = tf.to_int32(tf.nn.ctc_beam_search_decoder(model_logits3d, model_seq_lengths, merge_repeated=False)[0][0])
 model_predict_dense = tf.sparse_to_dense(model_predict.indices, model_predict.dense_shape, model_predict.values)
 
-batch = speech_data.mfcc_sequence_batch_generator(batch_size, target=speech_data.Target.dense, seq_len = 2, height=height)
+batch = speech_data.mfcc_sequence_batch_generator(batch_size, target=speech_data.Target.dense, seq_len = seq_len, height=height, n_mfcc = width)
 X, Y, batch_no = next(batch)
 trainX, trainY = X, Y
 testX, testY = X, Y #overfit for now
@@ -114,7 +117,14 @@ while epoch < epochs:
                 }
 
     #model_loss = tf.reduce_mean(tf.nn.ctc_loss(model_targetY, model_logits3d, model_seq_lengths))
-    loss, dense, _ = session.run([model_loss, tf.sparse_tensor_to_dense(model_targetY), model_optimizer], feed_dict)
+    loss, dense, _, logits3d, ctc_loss = session.run([model_loss, tf.sparse_tensor_to_dense(model_targetY), model_optimizer, model_logits3d, model_ctc_loss], feed_dict)
+    print(trainY)
+    '''
+    if trainY[0][0] == trainY[0][1]:
+      pdb.set_trace()
+    if np.isinf(loss):
+      pdb.set_trace()
+    '''
     print("loss({0})".format(loss))
     X, Y, batch_no = next(batch)
     trainX, trainY = X, Y
