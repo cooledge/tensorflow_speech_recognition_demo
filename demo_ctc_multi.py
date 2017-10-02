@@ -3,6 +3,7 @@ import speech_data
 import tensorflow as tf
 import numpy as np
 import pdb
+import os
 
 '''
 using the single digit utterances make N digit utterances
@@ -62,7 +63,7 @@ model_ctc_loss = tf.nn.ctc_loss(model_targetY, model_logits3d, model_seq_lengths
 model_loss = tf.reduce_mean(model_ctc_loss)
 
 #learning_rate = 0.0001
-learning_rate = 0.0001
+learning_rate = 0.001
 
 optimizer = tf.train.AdamOptimizer(learning_rate)
 
@@ -98,6 +99,14 @@ def dense_to_sparse(dense):
 
 batchTargetIxs, batchTargetVals, batchTargetShape, batchSeqLengths = dense_to_sparse(trainY)
 
+save_path = "./demo_ctc_multi"
+save_name = 'cp'
+if not os.path.exists(save_path):
+  os.makedirs(save_path)
+saver = tf.train.Saver(tf.global_variables(), max_to_keep=5)
+if tf.train.latest_checkpoint(save_path):
+  saver.restore(session, os.path.join(save_path, save_name))
+
 epoch = 0
 epochs = 100
 while epoch < epochs:
@@ -118,7 +127,6 @@ while epoch < epochs:
 
     #model_loss = tf.reduce_mean(tf.nn.ctc_loss(model_targetY, model_logits3d, model_seq_lengths))
     loss, dense, _, logits3d, ctc_loss = session.run([model_loss, tf.sparse_tensor_to_dense(model_targetY), model_optimizer, model_logits3d, model_ctc_loss], feed_dict)
-    print(trainY)
     '''
     if trainY[0][0] == trainY[0][1]:
       pdb.set_trace()
@@ -130,6 +138,8 @@ while epoch < epochs:
     trainX, trainY = X, Y
     testX, testY = X, Y #overfit for now
     batchTargetIxs, batchTargetVals, batchTargetShape, batchSeqLengths = dense_to_sparse(trainY)
+
+  saver.save(session, os.path.join(save_path, save_name))
 
   # check it
   batch_no = 1
