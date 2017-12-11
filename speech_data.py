@@ -29,7 +29,8 @@ SOURCE_URL = 'http://pannous.net/files/' #spoken_numbers.tar'
 DATA_DIR = 'data/'
 pcm_path = "data/spoken_numbers_pcm/" # 8 bit
 wav_path = "data/spoken_numbers_wav/" # 16 bit s16le
-path = pcm_path
+#path = pcm_path
+path = wav_path
 CHUNK = 4096
 test_fraction=0.1 # 10% of data for test / verification
 
@@ -202,7 +203,15 @@ def mfcc_sequence_batch_generator(batch_size=10, height=80, source=Source.DIGIT_
         labels = []
         batch_no += 1
 
-def mfcc_batch_generator(batch_size=10, source=Source.DIGIT_WAVES, target=Target.digits):
+def mfcc_load_file(wav):
+  wave, sr = librosa.load(wav, mono=True)
+  wave = np.trim_zeros(wave)
+  mfcc = librosa.feature.mfcc(wave, sr)
+  mfcc = mfcc[:, 0:80]
+  mfcc=np.pad(mfcc,((0,0),(0,80-len(mfcc[0]))), mode='constant', constant_values=0)
+  return np.array(mfcc)
+
+def mfcc_batch_generator(batch_size=10, height=80, source=Source.DIGIT_WAVES, target=Target.digits):
   maybe_download(source, DATA_DIR)
   if target == Target.speaker: speakers = get_speakers()
   batch_features = []
@@ -214,16 +223,26 @@ def mfcc_batch_generator(batch_size=10, source=Source.DIGIT_WAVES, target=Target
     batch_no = 0
     for wav in files:
       if not wav.endswith(".wav"): continue
+      #wav = '7_Bruce_40.wav'
       wave, sr = librosa.load(path+wav, mono=True)
       if target==Target.speaker: label=one_hot_from_item(speaker(wav), speakers)
       elif target==Target.digits:  label=dense_to_one_hot(int(wav[0]),10)
       elif target==Target.first_letter:  label=dense_to_one_hot((ord(wav[0]) - 48) % 32,32)
       elif target==Target.dense:  label=[ord(wav[0]) - ord('0')]
       else: raise Exception("todo : labels for Target!")
-      labels.append(label)
+
       mfcc = librosa.feature.mfcc(wave, sr)
+      # too wide for the net
+      if len(mfcc[0]) > height:
+        continue
+
+      labels.append(label)
       # print(np.array(mfcc).shape)
-      mfcc=np.pad(mfcc,((0,0),(0,80-len(mfcc[0]))), mode='constant', constant_values=0)
+      #print(wav)
+      #print(mfcc.shape)
+      
+      #pdb.set_trace()
+      mfcc=np.pad(mfcc,((0,0),(0,height-len(mfcc[0]))), mode='constant', constant_values=0)
       batch_features.append(np.array(mfcc))
       if len(batch_features) >= batch_size:
         # print(np.array(batch_features).shape)

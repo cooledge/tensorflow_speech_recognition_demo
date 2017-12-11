@@ -12,9 +12,12 @@ right(2322) wrong(110)
 
 from __future__ import division, print_function, absolute_import 
 import speech_data
+from audio_in import AudioIn
 import tensorflow as tf
 import numpy as np
 import pdb
+import os
+import pickle
 
 learning_rate = 0.0001
 training_iters = 300000  # steps
@@ -26,8 +29,8 @@ classes = 10  # digits
 
 # Network building
 # (?, 20, 80)
-model_input = tf.placeholder(tf.float32, shape=(batch_size, width, height))
-model_output = tf.placeholder(tf.float32, shape=(batch_size, 10))
+model_input = tf.placeholder(tf.float32, shape=(None, width, height))
+model_output = tf.placeholder(tf.float32, shape=(None, 10))
 # net = tflearn.input_data([None, width, height])
 
 # (?, 128)
@@ -47,7 +50,6 @@ model_logits = tf.matmul(rnn_output, model_fc_w) + model_fc_b
 # (? 10)
 #net = tflearn.fully_connected(net, classes, activation='softmax')
 
-
 model_predict = tf.nn.softmax(model_logits)
 model_loss = tf.losses.softmax_cross_entropy(model_output, model_logits)
 opt = tf.train.AdamOptimizer(learning_rate)
@@ -55,24 +57,45 @@ model_train = opt.minimize(model_loss)
 #net = tflearn.regression(net, optimizer='adam', learning_rate=learning_rate, loss='categorical_crossentropy')
 # Training
 
-### add this "fix" for tensorflow version errors
-'''
-col = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-for x in col:
-    tf.add_to_collection(tf.GraphKeys.VARIABLES, x ) 
-'''
-
 batch = speech_data.mfcc_batch_generator(batch_size)
 X, Y, batch_no = next(batch)
 trainX, trainY = X, Y
 testX, testY = X, Y #overfit for now
 
-epochs = 4
+class Persistance:
+
+  MODEL_NAME = 'tf_reverse'
+
+  def __init__(self):
+    self.saver = tf.train.Saver()
+    self.checkpoint_path = "./saves/{0}.ckpt".format(self.MODEL_NAME)
+    self.input_graph_path = "./saves/{0}.pbtxt".format(self.MODEL_NAME)
+    self.pickle_file = "./saves/pickle_file"
+    
+  def load_graph(self, session):
+    self.start = 0
+    if os.path.exists(self.pickle_file):
+      with open(self.pickle_file, 'rb') as input:
+        props = pickle.load(input)
+        self.start = props[ "epoch" ] + 1
+      self.saver.restore(session, self.checkpoint_path)
+
+  def save_graph(self,session, number_of_epochs=1):
+    save_path = self.saver.save(session, self.checkpoint_path)
+
+    with open(self.pickle_file, 'wb') as output:
+      pickle.dump({ "epoch" : number_of_epochs+self.start }, output)
+    print("Saved to {0}".format(save_path))
+
+persistance = Persistance()
 
 session = tf.Session()
 session.run(tf.global_variables_initializer())
+
+persistance.load_graph(session);
+
 epoch = 0
-epochs = 500
+epochs = 0
 while epoch < epochs:
   epoch += 1
   print("epoch {0}".format(epoch))
@@ -99,16 +122,16 @@ while epoch < epochs:
     X, Y, batch_no = next(batch)
     trainX, trainY = X, Y
     testX, testY = X, Y #overfit for now
-  
+ 
+  persistance.save_graph(session) 
   print("right({0}) wrong({1})".format(right, wrong))
-'''
-model = tflearn.DNN(net, tensorboard_verbose=0)
-while 1: #training_iters
-  model.fit(trainX, trainY, n_epoch=10, validation_set=(testX, testY), show_metric=True,
-          batch_size=batch_size)
-  _y=model.predict(X)
-model.save("tflearn.lstm.model")
-print (_y)
-print (y)
-'''
 
+class AI(AudioIn):
+  def on_audio(self, audio_filename):
+    print("loading audio")
+    audio_data = speech_data.mfcc_load_file(audio_filename)
+    predict = session.run(model_predict, {model_input: [audio_data]})
+    return "The prediction is {0}\nFull vector {1}".format(np.argmax(predict[0]), [round(p*100) for p in predict[0]])  
+
+ai = AI()
+ai.run() 
