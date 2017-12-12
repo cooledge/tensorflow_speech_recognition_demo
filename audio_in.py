@@ -29,7 +29,6 @@ def load_wave(path):
 
 def is_silent(snd_data):
     "Returns 'True' if below the 'silent' threshold"
-    #pdb.set_trace()
     #awave = load_wave('/home/dev/code/tensorflow_speech_recognition_demo/data/spoken_numbers_pcm/8_Princess_280.wav')
     #bwave = load_wave('./demo.wav')
     #print(snd_data)
@@ -106,8 +105,6 @@ def record():
 
         silent = is_silent(snd_data)
 
-        # pdb.set_trace()
-        #break
         if silent and snd_started:
             num_silent += 1
         elif not silent and not snd_started:
@@ -166,31 +163,35 @@ class AudioIn:
     files = os.listdir(self.training_path())
     if len(files) == 0:
       return 0
-    return max([int(file.split('_')[2].split('.')[0]) for file in files])
+    return max([int(file.split('_')[0]) for file in files])+1
 
   def on_make_training_data_pressed(self):
     instance = self.get_start_instance()
     for digit in range(10):
       self.set_text("Say the number {0}".format(digit))
-      record_to_file("{0}/greg_{1}_{2}.wav".format(self.training_path(), digit, instance))
+      self.top.update()
+      file_path = "{0}/{1}_greg_{2}.wav".format(self.training_path(), digit, instance)
+      record_to_file(file_path)
+      print("writing to {0}".format(file_path))
+    self.set_text("Done")
 
   def on_audio(self, audio):
     return "the return text in the parent"
 
   def run(self):
-    top = tk.Tk()
+    self.top = tk.Tk()
 
-    action_button = tk.Button(top, text="Action", command=(lambda: self.on_action_pressed()))
+    action_button = tk.Button(self.top, text="Action", command=(lambda: self.on_action_pressed()))
     action_button.pack()
 
-    action_button = tk.Button(top, text="Make Training Data", command=(lambda: self.on_make_training_data_pressed()))
+    action_button = tk.Button(self.top, text="Make Training Data", command=(lambda: self.on_make_training_data_pressed()))
     action_button.pack()
 
-    self.text = tk.Text(top)
+    self.text = tk.Text(self.top)
     self.text.insert(tk.INSERT, "This is where the text will appear")
     self.text.pack()
 
-    top.mainloop()
+    self.top.mainloop()
 
 '''
 if __name__ == '__main__':
