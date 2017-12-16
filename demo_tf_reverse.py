@@ -8,6 +8,9 @@ loaded batch of 2402 files
 loaded batch of 2402 files
 right(2322) wrong(110)
 
+Using Adam            30% right
+Using GradientDescent 35% right
+
 '''
 
 from __future__ import division, print_function, absolute_import 
@@ -92,7 +95,7 @@ session.run(tf.global_variables_initializer())
 persistance.load_graph(session);
 
 epoch = 0
-epochs = 80
+epochs = 0
 while epoch < epochs:
   epoch += 1
   print("epoch {0}".format(epoch))
