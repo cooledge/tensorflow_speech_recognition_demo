@@ -29,10 +29,6 @@ def load_wave(path):
 
 def is_silent(snd_data):
     "Returns 'True' if below the 'silent' threshold"
-    #awave = load_wave('/home/dev/code/tensorflow_speech_recognition_demo/data/spoken_numbers_pcm/8_Princess_280.wav')
-    #bwave = load_wave('./demo.wav')
-    #print(snd_data)
-
     return max(snd_data) < THRESHOLD
 
 def normalize(snd_data):
@@ -163,7 +159,11 @@ class AudioIn:
     files = os.listdir(self.training_path())
     if len(files) == 0:
       return 0
-    return max([int(file.split('_')[0]) for file in files])+1
+    return max([int(file.split('_')[2].split(".")[0]) for file in files])+1
+
+  def get_test_files(self):
+    path = self.training_path()
+    return [os.path.join(path, name) for name in os.listdir(path)]
 
   def on_make_training_data_pressed(self):
     instance = self.get_start_instance()
@@ -178,6 +178,12 @@ class AudioIn:
   def on_audio(self, audio):
     return "the return text in the parent"
 
+  def on_test_pressed(self):
+    self.set_text(self.on_test(self.get_test_files()))
+   
+  def on_test(self, files):
+    return "the test results"
+
   def run(self):
     self.top = tk.Tk()
 
@@ -185,6 +191,9 @@ class AudioIn:
     action_button.pack()
 
     action_button = tk.Button(self.top, text="Make Training Data", command=(lambda: self.on_make_training_data_pressed()))
+    action_button.pack()
+
+    action_button = tk.Button(self.top, text="Test", command=(lambda: self.on_test_pressed()))
     action_button.pack()
 
     self.text = tk.Text(self.top)

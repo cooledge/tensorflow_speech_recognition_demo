@@ -20,8 +20,7 @@ import os
 import pickle
 
 learning_rate = 0.0001
-training_iters = 300000  # steps
-batch_size = 64
+batch_size = 32
 
 width = 20  # mfcc features
 height = 80  # (max) length of utterance
@@ -31,36 +30,34 @@ classes = 10  # digits
 # (?, 20, 80)
 model_input = tf.placeholder(tf.float32, shape=(None, width, height))
 model_output = tf.placeholder(tf.float32, shape=(None, 10))
-# net = tflearn.input_data([None, width, height])
 
 # (?, 128)
 cell = tf.nn.rnn_cell.BasicLSTMCell(128)
-cell = tf.contrib.rnn.DropoutWrapper(cell, input_keep_prob=0.8, output_keep_prob=0.8)
+model_dropout_prob = tf.placeholder_with_default(1.0, shape=())
+cell = tf.contrib.rnn.DropoutWrapper(cell, input_keep_prob=model_dropout_prob, output_keep_prob=model_dropout_prob)
 rnn_input = [tf.squeeze(input, axis=2) for input in tf.split(model_input, height, axis=2)]
 
 # rnn_input.shape = list(20) of 64X80
 rnn_output, rnn_state = tf.nn.static_rnn(cell, rnn_input, dtype=tf.float32)
 # rnn_output.shape =  list of 80 of 64X128
 rnn_output = tf.concat(rnn_output, 1)
-# net = tflearn.lstm(net, 128, dropout=0.8)
 
 model_fc_w = tf.get_variable("fc_w", shape=(height*128, 10))
 model_fc_b = tf.get_variable("fc_b", shape=(10))
 model_logits = tf.matmul(rnn_output, model_fc_w) + model_fc_b
-# (? 10)
-#net = tflearn.fully_connected(net, classes, activation='softmax')
 
 model_predict = tf.nn.softmax(model_logits)
-model_loss = tf.losses.softmax_cross_entropy(model_output, model_logits)
-opt = tf.train.AdamOptimizer(learning_rate)
+model_l2_loss = tf.nn.l2_loss(model_fc_w) + tf.nn.l2_loss(model_fc_b)
+model_loss = tf.losses.softmax_cross_entropy(model_output, model_logits) + model_l2_loss
+#opt = tf.train.AdamOptimizer(learning_rate)
+opt = tf.train.GradientDescentOptimizer(learning_rate)
 model_train = opt.minimize(model_loss)
-#net = tflearn.regression(net, optimizer='adam', learning_rate=learning_rate, loss='categorical_crossentropy')
+
 # Training
 
 batch = speech_data.mfcc_batch_generator(batch_size)
 X, Y, batch_no = next(batch)
 trainX, trainY = X, Y
-testX, testY = X, Y #overfit for now
 
 class Persistance:
 
@@ -95,7 +92,7 @@ session.run(tf.global_variables_initializer())
 persistance.load_graph(session);
 
 epoch = 0
-epochs = 0
+epochs = 80
 while epoch < epochs:
   epoch += 1
   print("epoch {0}".format(epoch))
@@ -103,10 +100,9 @@ while epoch < epochs:
   batch_no = 1  # set to get in the loop
   while batch_no > 0:
     #print("batch_no({0})".format(batch_no))
-    loss, _ = session.run([model_loss, model_train], {model_input: trainX, model_output: trainY})
+    loss, _ = session.run([model_loss, model_train], {model_input: trainX, model_output: trainY, model_dropout_prob: 0.8})
     X, Y, batch_no = next(batch)
     trainX, trainY = X, Y
-    testX, testY = X, Y #overfit for now
 
   # check it
   batch_no = 1
@@ -121,12 +117,35 @@ while epoch < epochs:
         wrong += 1
     X, Y, batch_no = next(batch)
     trainX, trainY = X, Y
-    testX, testY = X, Y #overfit for now
  
   persistance.save_graph(session) 
   print("right({0}) wrong({1})".format(right, wrong))
 
 class AI(AudioIn):
+
+  def on_test(self, test_files):
+    right = 0
+    wrong = 0
+    message = ""
+    for audio_filename in test_files:
+      digit = int(os.path.basename(audio_filename).split('_')[0])
+      audio_data = speech_data.mfcc_load_file(audio_filename)
+      predict = session.run(model_predict, {model_input: [audio_data]})
+      details = [round(p*100) for p in predict[0]]
+      predict2 = session.run(model_predict, {model_input: [audio_data]})
+      predict = np.argmax(predict[0])
+      predict2 = np.argmax(predict2[0])
+      if predict != predict2:
+        pdb.set_trace()
+      message += "predict({0}) digit({1}) - {2}\n".format(predict, digit, details)
+      if predict == digit:
+        right += 1
+      else: 
+        wrong += 1
+    message += "{0} percent right".format(right/(right+wrong)*100)
+    return message
+      
+
   def on_audio(self, audio_filename):
     print("loading audio")
     audio_data = speech_data.mfcc_load_file(audio_filename)
@@ -135,3 +154,4 @@ class AI(AudioIn):
 
 ai = AI()
 ai.run() 
+
