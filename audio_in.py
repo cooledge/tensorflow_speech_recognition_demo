@@ -153,7 +153,9 @@ class AudioIn:
     self.text.insert(tk.END, text)
    
   def training_path(self):
+    #return './data/training_wav' 
     return './data/training' 
+    #return './data/training_pcm' 
 
   def get_start_instance(self):
     files = os.listdir(self.training_path())
@@ -179,7 +181,7 @@ class AudioIn:
     return "the return text in the parent"
 
   def on_test_pressed(self):
-    self.set_text(self.on_test(self.get_test_files()))
+    self.set_text(self.on_test())
    
   def on_test(self, files):
     return "the test results"
