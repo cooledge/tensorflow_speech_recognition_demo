@@ -32,6 +32,7 @@ wav_path = "data/spoken_numbers_wav/" # 16 bit s16le
 #path = pcm_path
 path = wav_path
 CHUNK = 4096
+HEIGHT = 120 # length of output in time quadrants
 test_fraction=0.1 # 10% of data for test / verification
 
 # http://pannous.net/files/spoken_numbers_pcm.tar
@@ -160,7 +161,7 @@ def spectro_batch_generator(batch_size=10,width=64,source_data=Source.DIGIT_SPEC
         labels = []
 
 # generates sequences of digits of length N
-def mfcc_sequence_batch_generator(batch_size=10, height=80, source=Source.DIGIT_WAVES, target=Target.digits, seq_len=1, n_mfcc = 20):
+def mfcc_sequence_batch_generator(batch_size=10, height=HEIGHT, source=Source.DIGIT_WAVES, target=Target.digits, seq_len=1, n_mfcc = 20):
   if target != Target.dense:
     raise Exception("todo : labels for Target!")
   maybe_download(source, DATA_DIR)
@@ -203,15 +204,17 @@ def mfcc_sequence_batch_generator(batch_size=10, height=80, source=Source.DIGIT_
         labels = []
         batch_no += 1
 
-def mfcc_load_file(wav):
+def mfcc_load_file(wav, n_mfcc = 20):
   wave, sr = librosa.load(wav, mono=True)
   wave = np.trim_zeros(wave)
-  mfcc = librosa.feature.mfcc(wave, sr)
-  mfcc = mfcc[:, 0:80]
-  mfcc=np.pad(mfcc,((0,0),(0,80-len(mfcc[0]))), mode='constant', constant_values=0)
+  mfcc = librosa.feature.mfcc(wave, sr, n_mfcc = n_mfcc)
+  if mfcc.shape[1] > HEIGHT:
+    print("cutting shape {0}".format(mfcc.shape[1]))
+  mfcc = mfcc[:, 0:HEIGHT]
+  mfcc=np.pad(mfcc,((0,0),(0,HEIGHT-len(mfcc[0]))), mode='constant', constant_values=0)
   return np.array(mfcc)
 
-def mfcc_batch_generator(batch_size=10, height=80, source=Source.DIGIT_WAVES, target=Target.digits):
+def mfcc_batch_generator(batch_size=10, height=HEIGHT, source=Source.DIGIT_WAVES, target=Target.digits, n_mfcc = 20):
   maybe_download(source, DATA_DIR)
   if target == Target.speaker: speakers = get_speakers()
   batch_features = []
@@ -231,7 +234,7 @@ def mfcc_batch_generator(batch_size=10, height=80, source=Source.DIGIT_WAVES, ta
       elif target==Target.dense:  label=[ord(wav[0]) - ord('0')]
       else: raise Exception("todo : labels for Target!")
 
-      mfcc = librosa.feature.mfcc(wave, sr)
+      mfcc = librosa.feature.mfcc(wave, sr, n_mfcc = n_mfcc)
       # too wide for the net
       if len(mfcc[0]) > height:
         continue

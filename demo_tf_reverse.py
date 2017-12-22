@@ -21,6 +21,22 @@ right(2216) wrong(632) Success rate is 40.0, dropout(90)
 right(1964) wrong(884) Success rate is 20.0, dropout(70)
 right(1827) wrong(1021) Success rate is 15.0, dropout(60)
 
+epochs = 150
+
+right(2520) wrong(328) Success rate is 30.0, dropout(90)
+
+right(2328) wrong(520) Success rate is 35.0, dropout(70)
+
+right(2250) wrong(598) Success rate is 25.0, dropout(60)
+
+
+right(2338) wrong(510) Success rate is 30.0, dropout(80) n_mfcc_features(5)
+right(2436) wrong(412) Success rate is 25.0, dropout(80) n_mfcc_features(10)
+right(2463) wrong(385) Success rate is 15.0, dropout(80) n_mfcc_features(15)
+right(2491) wrong(357) Success rate is 25.0, dropout(80) n_mfcc_features(20)
+right(2455) wrong(393) Success rate is 30.0, dropout(80) n_mfcc_features(30)
+right(2508) wrong(340) Success rate is 30.0, dropout(80) n_mfcc_features(40)
+
 '''
 
 from __future__ import division, print_function, absolute_import 
@@ -38,6 +54,7 @@ parser.add_argument('--ui', dest='ui', default=True)
 parser.add_argument('--no-ui', dest='ui', action='store_false')
 parser.add_argument('--test', default=False, action='store_true')
 parser.add_argument('--epochs', type=int, default=0)
+parser.add_argument('--mfcc_features', type=int, default=20)
 parser.add_argument('--dropout', type=int, default=80)
 args = parser.parse_args()
 
@@ -46,7 +63,7 @@ version_bidi = False
 learning_rate = 0.0001
 batch_size = 32
 
-width = 20  # mfcc features
+width = args.mfcc_features  # mfcc features
 height = 120  # (max) length of utterance
 classes = 10  # digits
 
@@ -90,7 +107,7 @@ model_train = opt.minimize(model_loss)
 
 # Training
 
-batch = speech_data.mfcc_batch_generator(batch_size)
+batch = speech_data.mfcc_batch_generator(batch_size, n_mfcc = width)
 X, Y, batch_no = next(batch)
 trainX, trainY = X, Y
 
@@ -172,7 +189,7 @@ def do_test():
   wrong = 0
   for audio_filename in test_files:
     digit = int(os.path.basename(audio_filename).split('_')[0])
-    audio_data = speech_data.mfcc_load_file(audio_filename)
+    audio_data = speech_data.mfcc_load_file(audio_filename, n_mfcc = width)
     predict = session.run(model_predict, {model_input: [audio_data]})
     details = [round(p*100) for p in predict[0]]
     predict = np.argmax(predict[0])
@@ -183,7 +200,7 @@ def do_test():
   return right/(right+wrong)*100
 
 if args.test:
-  print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX Success rate is {0}, dropout({1})".format(do_test(), args.dropout))
+  print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX Success rate is {0}, dropout({1}) n_mfcc_features({2})".format(do_test(), args.dropout, args.mfcc_features))
 
 class AI(AudioIn):
 
