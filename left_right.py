@@ -150,7 +150,11 @@ def record_to_file(path, nchannels=1):
     wf.close()
 
 if __name__ == '__main__':
-  pdb.set_trace()
+  parser = argparse.ArgumentParser(description='Record audio from microphones for training left right nn')
+  parser.add_argument('--left', dest='left', action='store_true', default=False, help='Sound will be coming from the left side')
+  parser.add_argument('--right', dest='right', action='store_true', default=False, help='Sound will be coming from the right side')
+  args = parser.parse_args()
+
   # wait for button press
   button = aiy.voicehat.get_button()
   button.wait_for_press()
@@ -160,7 +164,10 @@ if __name__ == '__main__':
   led = aiy.voicehat.get_led()
   led.set_state(aiy.voicehat.LED.ON)
   # record 2 channel
-  path = './output.wav'
+  if args.left:
+    path = './left.wav'
+  else:
+    path = './right.wav'
   record_to_file(path, 2)
   # turn off light
   led.set_state(aiy.voicehat.LED.OFF)
