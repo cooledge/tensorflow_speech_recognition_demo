@@ -16,6 +16,18 @@ import math
 import re
 import tensorflow as tf
 
+import pickle
+import socket
+import threading
+import json
+import requests
+from flask import Flask, request
+from flask_restful import Resource, Api
+from flask_jsonpify import jsonify
+
+#server_root_url  = 'http://192.168.0.26:5002/'
+server_root_url  = 'http://localhost:5002/'
+
 THRESHOLD = 500
 if True:
   CHUNK_SIZE = 1024 # 1024 byte per array
@@ -28,7 +40,6 @@ else:
   RATE = 8000
 
 def load_wave(path):
-  #pdb.set_trace()
   wf = wave.open(path, 'rb')
  # data = wf.readframes(wf.getnframes())
   data = wf.readframes(-1)
@@ -48,7 +59,6 @@ def plot_wave(path):
   wf = wave.open(path, 'rb')
   
   #Extract Raw Audio from Wav File
-  #pdb.set_trace()
   n_to_read = wf.getnframes() - wf.getnframes() % wf.getnchannels()
   signal = wf.readframes(n_to_read)
   signal = np.fromstring(signal, 'Int16')
@@ -78,7 +88,6 @@ def plot_wave(path):
 # returns the left - right channel
 def load_wave_diff(path):
   data = load_wave(path)
-  #pdb.set_trace()
   sample_len = int(len(data)/2)
   r = r[0:sample_len*2]
   r = np.reshape(r, (sample_len, 2))
@@ -193,7 +202,6 @@ def record(nchannels=1, max_samples=None):
 
     # split the channels
     ''' 
-    #pdb.set_trace()
     sample_len = int(len(r)/2)
     r = r[0:sample_len*2]
     r = np.reshape(r, (sample_len, 2))
@@ -314,7 +322,8 @@ if __name__ == '__main__':
   parser.add_argument('--left', dest='left', action='store_true', default=False, help='Sound will be coming from the left side')
   parser.add_argument('--right', dest='right', action='store_true', default=False, help='Sound will be coming from the right side')
   parser.add_argument('--make-data', dest='make_data', action='store_true', default=False, help='Convert the left right files into the training and test data')
-  parser.add_argument('--listen', dest='listen', action='store_true', default=False, help='Listen and run through the neural net')
+  parser.add_argument('--listens', dest='listens', action='store_true', default=False, help='Server side listen and run through the neural net')
+  parser.add_argument('--listenc', dest='listenc', action='store_true', default=False, help='Client side listen and run through the neural net')
   parser.add_argument('--epochs', dest='epochs', type=int, default=True, help='Number of epochs to train')
   args = parser.parse_args()
 
@@ -393,9 +402,13 @@ if __name__ == '__main__':
           wrong += 1
       
     print("right({0})/wrong({1}) percent {2}".format(right, wrong, 1.0*right/(right+wrong)))
-  elif args.listen:
+  elif args.listens:
+   
+    print('Loading data') 
     nn_train_input, nn_train_output, nn_test_input, nn_test_output = make_data()
+    print('Building model') 
     model_inputs, model_outputs, model_train, model_loss, model_predict = make_nn()
+    print('Init complete') 
     
     session = tf.Session()
     session.run(tf.global_variables_initializer())
@@ -407,19 +420,35 @@ if __name__ == '__main__':
     saver = tf.train.Saver(tf.global_variables(), max_to_keep=5)
     if tf.train.latest_checkpoint(save_path):
       saver.restore(session, os.path.join(save_path, save_name))
-   
+  
+    app = Flask(__name__)
+    api = Api(app)
+
+    class NN(Resource):
+      def post(self):
+        wav = request.json['wav']
+        
+        test_x = [wav]
+        predict = session.run(model_predict, { model_inputs: test_x })
+        p = numpy.argmax(predict[0])
+       
+        return jsonify([p])
+
+    api.add_resource(NN, '/nn')
+    app.run(port='5002')
+  elif args.listenc:
     while True: 
-      sample = record_ms(60)
+      sample = record_ms(slice_width_ms*2)
       n_samples = ms_to_n_samples(slice_width_ms)*2
       sample = sample[:n_samples]
+      sample = sample.tolist()
+      url = server_root_url + 'nn'
+      response = requests.post(url, json={'wav': sample}) 
+      p = response.json()[0]
       
-      test_x = [sample]
-      predict = session.run(model_predict, { model_inputs: test_x })
-      p = numpy.argmax(predict[0])
       if p == 0:
         print("Left")
       elif p == 1:
         print("Right")
       else:
         print("Silence")
-
