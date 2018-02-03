@@ -3,35 +3,93 @@ from array import array
 from struct import pack
 from struct import unpack
 
+import numpy
 import pyaudio
 import wave
 import os
 import numpy as np
 import pdb
 import argparse
-import aiy.assistant.grpc
-import aiy.audio
-import aiy.voicehat
 import time
+import wave
+import math
+import re
+import tensorflow as tf
 
 THRESHOLD = 500
 if True:
   CHUNK_SIZE = 1024 # 1024 byte per array
   FORMAT = pyaudio.paInt16 
   #RATE = 44100
-  RATE = 22050
+  RATE = 22050 # samples / second
 else:
   CHUNK_SIZE = 512 # array size is 256 bytes
   FORMAT = pyaudio.paInt8 
   RATE = 8000
 
 def load_wave(path):
-    wf = wave.open(path, 'rb')
-    data = wf.readframes(100000)
-    unpacked_wave = unpack("<{0}h".format(len(data)/2), data)
-    wf.close()
-    return unpacked_wave
+  #pdb.set_trace()
+  wf = wave.open(path, 'rb')
+ # data = wf.readframes(wf.getnframes())
+  data = wf.readframes(-1)
+  unpacked_wave = unpack("<{0}h".format(len(data)/2), data)
+  wf.close()
+  return unpacked_wave
 
+def plot_wave(path):
+  import matplotlib
+  import matplotlib.pyplot as plt
+
+  path = './lr/right_coveeed.wav'
+  path = './lr/right_wall.wav'
+  path = './lr/right_open.wav'
+  path = './lr/right_only_one.wav'
+
+  wf = wave.open(path, 'rb')
+  
+  #Extract Raw Audio from Wav File
+  #pdb.set_trace()
+  n_to_read = wf.getnframes() - wf.getnframes() % wf.getnchannels()
+  signal = wf.readframes(n_to_read)
+  signal = np.fromstring(signal, 'Int16')
+
+  signal = [ abs(s) for s in signal ]
+  #Split the data into channels 
+  channels = [[] for channel in range(wf.getnchannels())]
+  for index, datum in enumerate(signal):
+      channels[index%len(channels)].append(datum)
+
+  #Get time from indices
+  fs = wf.getframerate()
+  Time=np.linspace(0, len(signal)/len(channels)/fs, num=len(signal)/len(channels))
+
+  #diff = np.array(channels[0]) - np.array(channels[1])
+  #channels = [diff]
+  #Time=np.linspace(0, len(diff)/fs, num=len(diff))
+
+  #Plot
+  plt.figure(1)
+  plt.title('Signal Wave...')
+  for channel in channels:
+      plt.plot(Time,channel)
+  plt.show()
+ 
+'''
+# returns the left - right channel
+def load_wave_diff(path):
+  data = load_wave(path)
+  #pdb.set_trace()
+  sample_len = int(len(data)/2)
+  r = r[0:sample_len*2]
+  r = np.reshape(r, (sample_len, 2))
+  x = r[:, 0] - r[:, 1]
+  r = r[:, 1]
+'''
+
+def ms_to_n_samples(ms):
+  # samples / (second * (1000 ms / second)) == samples per ms
+  return int(RATE / 1000.0 * ms)
+  
 def is_silent(snd_data):
     "Returns 'True' if below the 'silent' threshold"
     return max(snd_data) < THRESHOLD
@@ -77,7 +135,10 @@ def add_silence(snd_data, seconds):
     r.extend([0 for i in xrange(int(seconds*RATE))])
     return r
 
-def record(nchannels=1):
+def record_ms(ms):
+  return record(1, ms_to_n_samples(ms))[1]
+
+def record(nchannels=1, max_samples=None):
     """
     Record a word or words from the microphone and 
     return the data as an array of signed shorts.
@@ -104,16 +165,20 @@ def record(nchannels=1):
             snd_data.byteswap()
         r.extend(snd_data)
 
-        print("got chunk")
-        silent = is_silent(snd_data)
-
-        if silent and snd_started:
-            num_silent += 1
-        elif not silent and not snd_started:
-            snd_started = True
-
-        if snd_started and num_silent > 30:
+        if max_samples is not None:
+          if len(r) > max_samples:
             break
+        else:
+          print("got chunk")
+          silent = is_silent(snd_data)
+
+          if silent and snd_started:
+              num_silent += 1
+          elif not silent and not snd_started:
+              snd_started = True
+
+          if snd_started and num_silent > 30:
+              break
 
     print("done")
     sample_width = p.get_sample_size(FORMAT)
@@ -122,12 +187,13 @@ def record(nchannels=1):
     p.terminate()
 
     r = normalize(r)
-    r = trim(r)
+    if max_samples is None:
+      r = trim(r)
     #r = add_silence(r, 0.5)
 
     # split the channels
     ''' 
-    pdb.set_trace()
+    #pdb.set_trace()
     sample_len = int(len(r)/2)
     r = r[0:sample_len*2]
     r = np.reshape(r, (sample_len, 2))
@@ -149,27 +215,211 @@ def record_to_file(path, nchannels=1):
     wf.writeframes(data)
     wf.close()
 
+def ensure_dir(file_path):
+    directory = os.path.dirname(file_path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+def left_path():
+  return './lr/left.wav'
+
+def rigth_path():
+  return './lr/right.wav'
+
+nn_batch_size = 20
+slice_width_ms = 30
+slice_stride_ms = 15
+n_samples = ms_to_n_samples(slice_width_ms)*2
+n_stride =  ms_to_n_samples(slice_stride_ms)*2
+lstm_size = 128
+number_of_classes = 3
+cell_width = 1
+
+# 100 epochs: right(650)/wrong(50) percent 0.928571428571
+
+n_train_size_percent = 0.80
+
+# slice up the input data into overlapping sections
+# of length slice_ms using the data from file
+#
+# returns array of slices
+
+def make_input(data):
+  return [data[i:i+n_samples] for i in xrange(0, len(data)-n_samples, n_stride)]
+
+def make_data():
+  ensure_dir('./lr/train')
+  ensure_dir('./lr/test')
+
+  files = os.listdir('./lr')
+
+  nn_input = []
+  nn_output = []
+
+  for file in files:
+    if re.search('^left.*wav$', file) is None:
+      output = [1,0,0]
+    elif re.search('^right.*wav$', file) is None:
+      output = [0,1,0]
+    elif re.search('^silence.*wav$', file) is None:
+      output = [0,0,1]
+    else:
+      continue
+      
+    data = load_wave('./lr/' + file)
+    nn_input += make_input(data)
+    nn_output += [output for i in range(len(nn_input))]
+
+  # re-order the i/o
+  indexes = [i for i in range(len(nn_input))]
+  numpy.random.shuffle(indexes)
+  nn_input = [nn_input[i] for i in indexes]
+  nn_output = [nn_output[i] for i in indexes]
+
+  n_train_size = int(len(nn_input) * n_train_size_percent)
+
+  nn_train_input = nn_input[:n_train_size]
+  nn_train_output = nn_output[:n_train_size]
+ 
+  nn_test_input = nn_input[n_train_size:]
+  nn_test_output = nn_output[n_train_size:]
+
+  return [nn_train_input, nn_train_output, nn_test_input, nn_test_output]
+ 
+def make_nn():
+  #model_inputs = tf.placeholder(tf.float32, (nn_batch_size, n_samples), name='inputs')
+  model_inputs = tf.placeholder(tf.float32, (None, n_samples), name='inputs')
+  # class (left, right, neither)
+  model_outputs = tf.placeholder(tf.float32, (nn_batch_size, number_of_classes), name='outputs')
+
+  model_lstm = tf.contrib.rnn.BasicLSTMCell(lstm_size)
+
+  model_rnn_inputs = tf.split(model_inputs, n_samples, axis=1)
+  model_rnn_output, model_rnn_state = tf.nn.static_rnn(model_lstm, model_rnn_inputs, dtype=tf.float32)
+  model_rnn_output = tf.concat(model_rnn_output, 1)
+
+  model_w = tf.get_variable("fc_w", shape=(model_rnn_output.shape[1], number_of_classes))
+  model_b = tf.get_variable("fc_b", shape=number_of_classes)
+  model_logits = tf.matmul(model_rnn_output, model_w) + model_b
+
+  model_predict = tf.nn.softmax(model_logits)
+  model_loss = tf.losses.softmax_cross_entropy(model_outputs, model_logits)
+  model_opt = tf.train.AdamOptimizer(0.001)
+  model_train = model_opt.minimize(model_loss)
+
+  return [model_inputs, model_outputs, model_train, model_loss, model_predict]
+  
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Record audio from microphones for training left right nn')
   parser.add_argument('--left', dest='left', action='store_true', default=False, help='Sound will be coming from the left side')
   parser.add_argument('--right', dest='right', action='store_true', default=False, help='Sound will be coming from the right side')
+  parser.add_argument('--make-data', dest='make_data', action='store_true', default=False, help='Convert the left right files into the training and test data')
+  parser.add_argument('--listen', dest='listen', action='store_true', default=False, help='Listen and run through the neural net')
+  parser.add_argument('--epochs', dest='epochs', type=int, default=True, help='Number of epochs to train')
   args = parser.parse_args()
 
-  # wait for button press
-  button = aiy.voicehat.get_button()
-  button.wait_for_press()
-  # sleep 3 seconds
-  time.sleep(3) 
-  # turn on light
-  led = aiy.voicehat.get_led()
-  led.set_state(aiy.voicehat.LED.ON)
-  # record 2 channel
-  if args.left:
-    path = './left.wav'
-  else:
-    path = './right.wav'
-  record_to_file(path, 2)
-  # turn off light
-  led.set_state(aiy.voicehat.LED.OFF)
-  # lag it to get the off to be sent
-  time.sleep(1) 
+  epochs = args.epochs
+  # get the training data from the AIY speech device
+
+  if args.left or args.right:
+    import aiy.assistant.grpc
+    import aiy.audio
+    import aiy.voicehat
+    # wait for button press
+    ensure_dir('./lr')
+    button = aiy.voicehat.get_button()
+    button.wait_for_press()
+    # sleep 3 seconds
+    time.sleep(3) 
+    # turn on light
+    led = aiy.voicehat.get_led()
+    led.set_state(aiy.voicehat.LED.ON)
+    # record 2 channel
+    if args.left:
+      path = left_path()
+    else:
+      path = right_path()
+    record_to_file(path, 2)
+    # turn off light
+    led.set_state(aiy.voicehat.LED.OFF)
+    # lag it to get the off to be sent
+    time.sleep(1) 
+  elif args.make_data:
+    print("Converting the left.wav and right.wav files into training data")
+    #load_wave(left_path()) 
+    #plot_wave(left_path())
+    nn_train_input, nn_train_output, nn_test_input, nn_test_output = make_data()
+    model_inputs, model_outputs, model_train, model_loss, model_predict = make_nn()
+
+    session = tf.Session()
+    session.run(tf.global_variables_initializer())
+
+    save_path = "./left_right"
+    save_name = 'cp'
+    if not os.path.exists(save_path):
+      os.makedirs(save_path)
+    saver = tf.train.Saver(tf.global_variables(), max_to_keep=5)
+    if tf.train.latest_checkpoint(save_path):
+      saver.restore(session, os.path.join(save_path, save_name))
+
+    for epoch in range(epochs):
+      print("Epoch {0}".format(epoch))
+      average_loss = 0 
+      n_batches = 0
+      for batch_no in xrange(0, len(nn_train_input)-nn_batch_size, nn_batch_size):
+        train_x = nn_train_input[batch_no:batch_no+nn_batch_size]
+        train_y = nn_train_output[batch_no:batch_no+nn_batch_size]
+        _, loss = session.run([model_train, model_loss], { model_inputs: train_x, model_outputs: train_y })
+        average_loss += loss
+        n_batches += 1
+
+      print("Loss is {0}".format(average_loss/n_batches))
+      if loss < 0.03:
+        break
+
+    saver.save(session, os.path.join(save_path, save_name))
+
+    print("Doing the tests")
+    right = 0
+    wrong = 0
+    for batch_no in xrange(0, len(nn_test_input)-nn_batch_size, nn_batch_size):
+      test_x = nn_test_input[batch_no:batch_no+nn_batch_size]
+      test_y = nn_test_output[batch_no:batch_no+nn_batch_size]
+      predict = session.run(model_predict, { model_inputs: test_x })
+      for i in range(len(predict)):
+        if numpy.argmax(predict[i]) == numpy.argmax(test_y[i]):
+          right += 1
+        else:
+          wrong += 1
+      
+    print("right({0})/wrong({1}) percent {2}".format(right, wrong, 1.0*right/(right+wrong)))
+  elif args.listen:
+    nn_train_input, nn_train_output, nn_test_input, nn_test_output = make_data()
+    model_inputs, model_outputs, model_train, model_loss, model_predict = make_nn()
+    
+    session = tf.Session()
+    session.run(tf.global_variables_initializer())
+
+    save_path = "./left_right"
+    save_name = 'cp'
+    if not os.path.exists(save_path):
+      os.makedirs(save_path)
+    saver = tf.train.Saver(tf.global_variables(), max_to_keep=5)
+    if tf.train.latest_checkpoint(save_path):
+      saver.restore(session, os.path.join(save_path, save_name))
+   
+    while True: 
+      sample = record_ms(60)
+      n_samples = ms_to_n_samples(slice_width_ms)*2
+      sample = sample[:n_samples]
+      
+      test_x = [sample]
+      predict = session.run(model_predict, { model_inputs: test_x })
+      p = numpy.argmax(predict[0])
+      if p == 0:
+        print("Left")
+      elif p == 1:
+        print("Right")
+      else:
+        print("Silence")
+
