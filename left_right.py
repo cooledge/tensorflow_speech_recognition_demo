@@ -14,7 +14,6 @@ import time
 import wave
 import math
 import re
-import tensorflow as tf
 
 import pickle
 import socket
@@ -404,6 +403,8 @@ if __name__ == '__main__':
     print("right({0})/wrong({1}) percent {2}".format(right, wrong, 1.0*right/(right+wrong)))
   elif args.listens:
    
+    import tensorflow as tf
+
     print('Loading data') 
     nn_train_input, nn_train_output, nn_test_input, nn_test_output = make_data()
     print('Building model') 
@@ -435,7 +436,7 @@ if __name__ == '__main__':
         return jsonify([p])
 
     api.add_resource(NN, '/nn')
-    app.run(port='5002')
+    app.run(port='5002', host='0.0.0.0')
   elif args.listenc:
     while True: 
       sample = record_ms(slice_width_ms*2)
