@@ -143,8 +143,8 @@ def add_silence(snd_data, seconds):
     r.extend([0 for i in xrange(int(seconds*RATE))])
     return r
 
-def record_ms(ms):
-  return record(1, ms_to_n_samples(ms))[1]
+def record_ms(ms, n_channels=2):
+  return record(n_channels, ms_to_n_samples(ms))[1]
 
 def record(nchannels=1, max_samples=None):
     """
@@ -428,11 +428,13 @@ if __name__ == '__main__':
     class NN(Resource):
       def post(self):
         wav = request.json['wav']
-        
+        #pdb.set_trace()
+        #checksum = sum(wav)
+        #print("The sum is {0}".format(checksum))
         test_x = [wav]
         predict = session.run(model_predict, { model_inputs: test_x })
         p = numpy.argmax(predict[0])
-       
+        print(predict[0]) 
         return jsonify([p])
 
     api.add_resource(NN, '/nn')
