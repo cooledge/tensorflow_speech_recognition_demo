@@ -20,12 +20,8 @@ import socket
 import threading
 import json
 import requests
-from flask import Flask, request
-from flask_restful import Resource, Api
-from flask_jsonpify import jsonify
 
-#server_root_url  = 'http://192.168.0.26:5002/'
-server_root_url  = 'http://localhost:5002/'
+server_root_url  = 'http://dev-X555QA:5002/'
 
 THRESHOLD = 500
 if True:
@@ -404,6 +400,9 @@ if __name__ == '__main__':
   elif args.listens:
    
     import tensorflow as tf
+    from flask import Flask, request
+    from flask_restful import Resource, Api
+    from flask_jsonpify import jsonify
 
     print('Loading data') 
     nn_train_input, nn_train_output, nn_test_input, nn_test_output = make_data()
@@ -440,12 +439,15 @@ if __name__ == '__main__':
     api.add_resource(NN, '/nn')
     app.run(port='5002', host='0.0.0.0')
   elif args.listenc:
-    while True: 
-      sample = record_ms(slice_width_ms*2)
+    while True:
+      pdb.set_trace() 
+      sample = record_ms(slice_width_ms)
       n_samples = ms_to_n_samples(slice_width_ms)*2
       sample = sample[:n_samples]
       sample = sample.tolist()
       url = server_root_url + 'nn'
+      #checksum = sum(sample)
+      #print("The sum is {0}".format(checksum))
       response = requests.post(url, json={'wav': sample}) 
       p = response.json()[0]
       
