@@ -46,10 +46,12 @@ def plot_wave(path):
   import matplotlib
   import matplotlib.pyplot as plt
 
+  '''
   path = './lr/right_coveeed.wav'
   path = './lr/right_wall.wav'
   path = './lr/right_open.wav'
   path = './lr/right_only_one.wav'
+  '''
 
   wf = wave.open(path, 'rb')
   
@@ -74,7 +76,7 @@ def plot_wave(path):
 
   #Plot
   plt.figure(1)
-  plt.title('Signal Wave...')
+  plt.title(path)
   for channel in channels:
       plt.plot(Time,channel)
   plt.show()
@@ -206,9 +208,32 @@ def record(nchannels=1, max_samples=None):
     
     return sample_width, r
 
+'''
 def record_to_file(path, nchannels=1):
     "Records from the microphone and outputs the resulting data to 'path'"
     sample_width, data = record(nchannels)
+    data = pack('<' + ('h'*len(data)), *data)
+
+    wf = wave.open(path, 'wb')
+    wf.setnchannels(nchannels)
+    wf.setsampwidth(sample_width)
+    wf.setframerate(RATE)
+    wf.writeframes(data)
+    wf.close()
+'''
+
+def record_to_file(path, nchannels=1):
+    "Records from the microphone and outputs the resulting data to 'path'"
+    sample_width, data = record(nchannels)
+    wave_to_file(path, data, nchannels, sample_width)
+
+def add_index_to_filename(filename):
+  i = 0
+  while os.path.exists(filename + str(i) + ".wav"):
+    i += 1
+  return filename + str(i) + ".wav"
+
+def wave_to_file(path, data, nchannels, sample_width):
     data = pack('<' + ('h'*len(data)), *data)
 
     wf = wave.open(path, 'wb')
@@ -314,18 +339,26 @@ def make_nn():
   
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Record audio from microphones for training left right nn')
+  parser.add_argument('--to_server', dest='to_server', type=str, default="", help='Send data to server side to a file with the given name')
   parser.add_argument('--left', dest='left', action='store_true', default=False, help='Sound will be coming from the left side')
   parser.add_argument('--right', dest='right', action='store_true', default=False, help='Sound will be coming from the right side')
   parser.add_argument('--make-data', dest='make_data', action='store_true', default=False, help='Convert the left right files into the training and test data')
   parser.add_argument('--listens', dest='listens', action='store_true', default=False, help='Server side listen and run through the neural net')
   parser.add_argument('--listenc', dest='listenc', action='store_true', default=False, help='Client side listen and run through the neural net')
+  parser.add_argument('--get_data', dest='get_data', action='store_true', default=False, help='Run the server side of getting sample data')
+  parser.add_argument('--plot', dest='plot', action='store_true', default=False, help='Plot the wavs in the lr directory.')
   parser.add_argument('--epochs', dest='epochs', type=int, default=True, help='Number of epochs to train')
   args = parser.parse_args()
 
   epochs = args.epochs
   # get the training data from the AIY speech device
 
-  if args.left or args.right:
+  if args.plot:
+    files = os.listdir('./lr')
+    for file in files:
+      plot_wave('./lr/' + file) 
+   
+  elif args.left or args.right or arg.to_server:
     import aiy.assistant.grpc
     import aiy.audio
     import aiy.voicehat
@@ -338,12 +371,27 @@ if __name__ == '__main__':
     # turn on light
     led = aiy.voicehat.get_led()
     led.set_state(aiy.voicehat.LED.ON)
-    # record 2 channel
-    if args.left:
-      path = left_path()
+    if args.to_server:
+      max_samples = ms_to_n_samples(ms)
+      sample_width, r = record(2, max_samples)
+
+      json = {
+        'name': args.to_server,
+        'sample_width': sample_width,
+        'nchannels': nchannels,
+        'wav': sample
+      }
+
+      url = server_root_url + 'nn'
+      response = requests.post(url, json) 
+      print("Sent the data {0}".format(response))
     else:
-      path = right_path()
-    record_to_file(path, 2)
+      # record 2 channel
+      if args.left:
+        path = left_path()
+      else:
+        path = right_path()
+      record_to_file(path, 2)
     # turn off light
     led.set_state(aiy.voicehat.LED.OFF)
     # lag it to get the off to be sent
@@ -397,6 +445,22 @@ if __name__ == '__main__':
           wrong += 1
       
     print("right({0})/wrong({1}) percent {2}".format(right, wrong, 1.0*right/(right+wrong)))
+  elif args.get_data:
+    app = Flask(__name__)
+    api = Api(app)
+
+    class Data(Resource):
+      def post(self):
+        name = request.json['name']
+        sample_width = request.json['sample_width']
+        nchannels = request.json['nchannels']
+        wav = request.json['wav']
+        path = add_index_to_filename("./lr/" + filename)
+        save_to_file(path, wav, nchannels, sample_width)
+        plot_wave(path)
+
+    api.add_resource(Data, '/data')
+    app.run(port='5002', host='0.0.0.0')
   elif args.listens:
    
     import tensorflow as tf
@@ -446,8 +510,6 @@ if __name__ == '__main__':
       sample = sample[:n_samples]
       sample = sample.tolist()
       url = server_root_url + 'nn'
-      #checksum = sum(sample)
-      #print("The sum is {0}".format(checksum))
       response = requests.post(url, json={'wav': sample}) 
       p = response.json()[0]
       
