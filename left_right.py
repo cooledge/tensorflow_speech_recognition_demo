@@ -358,7 +358,7 @@ if __name__ == '__main__':
     for file in files:
       plot_wave('./lr/' + file) 
    
-  elif args.left or args.right or arg.to_server:
+  elif args.left or args.right or args.to_server:
     import aiy.assistant.grpc
     import aiy.audio
     import aiy.voicehat
@@ -446,17 +446,21 @@ if __name__ == '__main__':
       
     print("right({0})/wrong({1}) percent {2}".format(right, wrong, 1.0*right/(right+wrong)))
   elif args.get_data:
+    from flask import Flask, request
+    from flask_restful import Resource, Api
+    from flask_jsonpify import jsonify
+
     app = Flask(__name__)
     api = Api(app)
 
     class Data(Resource):
       def post(self):
-        name = request.json['name']
+        filename = request.json['name']
         sample_width = request.json['sample_width']
         nchannels = request.json['nchannels']
         wav = request.json['wav']
         path = add_index_to_filename("./lr/" + filename)
-        save_to_file(path, wav, nchannels, sample_width)
+        wave_to_file(path, wav, nchannels, sample_width)
         plot_wave(path)
 
     api.add_resource(Data, '/data')
