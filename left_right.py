@@ -165,6 +165,7 @@ def record(nchannels=1, max_samples=None):
     r = array('h')
 
     while 1:
+        #pdb.set_trace()
         # little endian, signed short
         snd_data = array('h', stream.read(CHUNK_SIZE))
         if byteorder == 'big':
@@ -365,6 +366,7 @@ if __name__ == '__main__':
     # wait for button press
     ensure_dir('./lr')
     button = aiy.voicehat.get_button()
+    print('wait for press')
     button.wait_for_press()
     # sleep 3 seconds
     time.sleep(3) 
@@ -372,8 +374,10 @@ if __name__ == '__main__':
     led = aiy.voicehat.get_led()
     led.set_state(aiy.voicehat.LED.ON)
     if args.to_server:
-      max_samples = ms_to_n_samples(ms)
-      sample_width, r = record(2, max_samples)
+      max_samples = ms_to_n_samples(3000)
+      nchannels = 2
+      sample_width, sample = record(nchannels, max_samples)
+      sample = list(sample)
 
       json = {
         'name': args.to_server,
@@ -382,8 +386,8 @@ if __name__ == '__main__':
         'wav': sample
       }
 
-      url = server_root_url + 'nn'
-      response = requests.post(url, json) 
+      url = server_root_url + 'data'
+      response = requests.post(url, json=json) 
       print("Sent the data {0}".format(response))
     else:
       # record 2 channel
@@ -508,7 +512,7 @@ if __name__ == '__main__':
     app.run(port='5002', host='0.0.0.0')
   elif args.listenc:
     while True:
-      pdb.set_trace() 
+      #pdb.set_trace() 
       sample = record_ms(slice_width_ms)
       n_samples = ms_to_n_samples(slice_width_ms)*2
       sample = sample[:n_samples]
